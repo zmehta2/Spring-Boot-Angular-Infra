@@ -1,21 +1,21 @@
 name: Smoke Test Deployment
 
 on:
-  push:
-    branches:
-      - main
-#  workflow_run:
-#    workflows: ["Build and Push to ECR"]
-#    types:
-#      - completed
-#  workflow_dispatch:
-#    inputs:
-#      backend_tag:
-#        description: 'Backend image tag'
-#        required: true
-#      frontend_tag:
-#        description: 'Frontend image tag'
-#        required: true
+#  push:
+#    branches:
+#      - main
+  workflow_run:
+    workflows: ["Build and Push to ECR"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      backend_tag:
+        description: 'Backend image tag'
+        required: true
+      frontend_tag:
+        description: 'Frontend image tag'
+        required: true
 
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
@@ -73,7 +73,7 @@ jobs:
           echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
           
           # Wait for instance to be ready
-          aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID
+          aws ec2 wait instance-running --instance-ids $INSTANCE_ID
           
           # Get public IP
           PUBLIC_IP=$(aws ec2 describe-instances \
