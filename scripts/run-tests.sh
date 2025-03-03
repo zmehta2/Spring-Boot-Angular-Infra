@@ -7,7 +7,7 @@ sleep 20
 
 # Test backend API
 echo "Testing backend API..."
-BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/springboot-crud-rest/api/v1/employees)
+BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080//springboot-crud-rest/api/v1/employees)
 
 if [[ "$BACKEND_STATUS" -ne 200 ]]; then
   echo "Backend test failed with status $BACKEND_STATUS"
