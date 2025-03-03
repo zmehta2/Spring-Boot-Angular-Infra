@@ -1,21 +1,21 @@
 name: Smoke Test Deployment
 
-on:
+#on:
 #  push:
 #    branches:
 #      - main
-  workflow_run:
-    workflows: ["Build and Push to ECR"]
-    types:
-      - completed
-  workflow_dispatch:
-    inputs:
-      backend_tag:
-        description: 'Backend image tag'
-        required: true
-      frontend_tag:
-        description: 'Frontend image tag'
-        required: true
+#  workflow_run:
+#    workflows: ["Build and Push to ECR"]
+#    types:
+#      - completed
+#  workflow_dispatch:
+#    inputs:
+#      backend_tag:
+#        description: 'Backend image tag'
+#        required: true
+#      frontend_tag:
+#        description: 'Frontend image tag'
+#        required: true
 
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
