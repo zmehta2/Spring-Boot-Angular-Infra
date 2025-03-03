@@ -244,52 +244,24 @@ jobs:
                 curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8080/springboot-crud-rest/api/v1/employees | grep -q 200 || exit 1
                 echo "✅ Backend code deployed successfully!"
                 
-                # Store test result
-                TEST_RESULT=$?
-                echo "::set-output name=test_result::$TEST_RESULT"
-                echo "TEST_RESULT=$TEST_RESULT" >> $GITHUB_ENV
-                
-                # For debugging
-                if [ $TEST_RESULT -eq 0 ]; then
-                  echo "Tests passed successfully!"
-                else
-                  echo "Tests failed with exit code $TEST_RESULT"
-                fi
             EOF
-          
-        continue-on-error: true
       - name: Process Test Results
+        if: failure()
         run: |
-            echo "Test result was: ${{ env.TEST_RESULT }}"
-            
-            if [ "${{ env.TEST_RESULT }}" == "0" ]; then
-              # Tests passed, tag images as QA-ready
-              echo "Creating tag-images.sh script..."
-              cat > scripts/tag-images.sh << 'EOF'
-              #!/bin/bash
-              aws ecr batch-get-image --repository-name backend --image-ids imageTag=$1 --query 'images[].imageManifest' --output text | aws ecr put-image --repository-name backend --image-tag QA-ready --image-manifest -
-              aws ecr batch-get-image --repository-name frontend --image-ids imageTag=$2 --query 'images[].imageManifest' --output text | aws ecr put-image --repository-name frontend --image-tag QA-ready --image-manifest -
-              EOF
-              chmod +x scripts/tag-images.sh
-            
-              echo "Tagging images as QA-ready..."
-              ./scripts/tag-images.sh "${{ needs.build.outputs.image_tag }}" "${{ needs.build.outputs.image_tag }}"
-              echo "Tests passed, images tagged as QA-ready"
-            else
-              # Tests failed, remove images
-              echo "Creating remove-images.sh script..."
-              cat > scripts/remove-images.sh << 'EOF'
-              #!/bin/bash
-              aws ecr batch-delete-image --repository-name backend --image-ids imageTag=$1
-              aws ecr batch-delete-image --repository-name frontend --image-ids imageTag=$2
-              EOF
-              chmod +x scripts/remove-images.sh
-            
-              echo "Removing failed images..."
-              ./scripts/remove-images.sh "${{ needs.build.outputs.image_tag }}" "${{ needs.build.outputs.image_tag }}"
-              echo "Tests failed, images removed from ECR"
-              exit 1
-            fi
+            echo "Smoke test failed. Cleaning up Docker images in ECR..."
+            # Tests failed, remove images
+            echo "Creating remove-images.sh script..."
+            cat > scripts/remove-images.sh << 'EOF'
+            #!/bin/bash
+            aws ecr batch-delete-image --repository-name backend --image-ids imageTag=$1
+            aws ecr batch-delete-image --repository-name frontend --image-ids imageTag=$2
+            EOF
+            chmod +x scripts/remove-images.sh
+          
+            echo "Removing failed images..."
+            ./scripts/remove-images.sh "${{ needs.build.outputs.image_tag }}" "${{ needs.build.outputs.image_tag }}"
+            echo "Tests failed, images removed from ECR"
+            exit 1
 
       - name: Cleanup EC2 Instance
         if: always()
