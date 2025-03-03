@@ -113,10 +113,14 @@ jobs:
           systemctl start docker
           systemctl enable docker
           usermod -a -G docker ec2-user
-          
-          # Install Docker Compose
+
+          # Install Docker Compose correctly
           curl -L "https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
           chmod +x /usr/local/bin/docker-compose
+          ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+          # Install common tools
+          yum install -y jq nc
           EOF
           chmod +x config/test-ec2-userdata.sh
 
@@ -199,7 +203,7 @@ jobs:
           # Create ECR login script
           cat > scripts/ecr-login.sh << 'EOF'
           #!/bin/bash
-          aws ecr get-login-password --region $1 | docker login --username AWS --password-stdin $ECR_REGISTRY
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
           EOF
           
           # Create test script
@@ -208,6 +212,17 @@ jobs:
           # Wait for services to start
           echo "Waiting for services to start..."
           sleep 20
+          
+           # Test frontend
+          echo "Testing frontend..."
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4200)
+          
+          echo "Frontend status: $FRONTEND_STATUS"
+          
+          if [[ "$FRONTEND_STATUS" -ne 200 ]]; then
+            echo "Frontend test failed with status $FRONTEND_STATUS"
+            exit 1
+          fi
           
           # Test backend API
           echo "Testing backend API..."
@@ -219,18 +234,7 @@ jobs:
             echo "Backend test failed with status $BACKEND_STATUS"
             exit 1
           fi
-          
-          # Test frontend
-          echo "Testing frontend..."
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80)
-          
-          echo "Frontend status: $FRONTEND_STATUS"
-          
-          if [[ "$FRONTEND_STATUS" -ne 200 ]]; then
-            echo "Frontend test failed with status $FRONTEND_STATUS"
-            exit 1
-          fi
-          
+        
           echo "All tests passed successfully!"
           exit 0
           EOF
@@ -271,7 +275,7 @@ jobs:
               image: ${ECR_REGISTRY}/frontend:${TAG}
               container_name: frontend
               ports:
-                - "80:4200"
+                - "4200:4200"
               depends_on:
                 - backend
               networks:
@@ -293,7 +297,11 @@ jobs:
         id: deploy-test
         run: |
           echo "Connecting to EC2 at IP: ${{ env.PUBLIC_IP }}"
-          
+
+          # Hard-code the tag value for testing
+          TAG="${{ needs.build.outputs.image_tag }}"
+          echo "Using tag: $TAG"
+
           # Copy scripts and config to EC2
           scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no -o ConnectTimeout=60 \
             scripts/setup-docker.sh \
@@ -301,26 +309,38 @@ jobs:
             scripts/run-tests.sh \
             templates/docker-compose.test.yml \
             ec2-user@${{ env.PUBLIC_IP }}:~/
-          
-          # Run setup and tests
+
+          # Run setup and tests with fixed tag
           ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no -o ConnectTimeout=60 ec2-user@${{ env.PUBLIC_IP }} << EOF
-            # Setup environment variables
-            export ECR_REGISTRY=$ECR_REGISTRY
-            export TAG=${{ needs.build.outputs.image_tag }}
-            export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-            export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-            export AWS_REGION=${{ secrets.AWS_REGION }}
-            export AWS_SESSION_TOKEN=${{ secrets.AWS_SESSION_TOKEN }}
-          
+            # Setup environment variables (with explicit debugging)
+            export ECR_REGISTRY="${ECR_REGISTRY}"
+            export TAG="${TAG}"
+
+            echo "Using ECR registry: \$ECR_REGISTRY"
+            echo "Using image tag: \$TAG"
+
+            export AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}"
+            export AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+            export AWS_REGION="${{ secrets.AWS_REGION }}"
+            export AWS_SESSION_TOKEN="${{ secrets.AWS_SESSION_TOKEN }}"
+
+            # Install Docker Compose if missing
+            if ! command -v docker-compose &> /dev/null; then
+              echo "Docker Compose not found, installing..."
+              sudo curl -L "https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+              sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+            fi
+
             # Log into ECR
             chmod +x ecr-login.sh
             ./ecr-login.sh $AWS_REGION
-          
+
             # Start containers
             mv docker-compose.test.yml docker-compose.yml
-            echo "Starting containers with images: $ECR_REGISTRY/backend:$TAG and $ECR_REGISTRY/frontend:$TAG"
+            echo "Starting containers with images: \$ECR_REGISTRY/backend:\$TAG and \$ECR_REGISTRY/frontend:\$TAG"
             sudo -E docker-compose up -d
-          
+
             # Run tests
             chmod +x run-tests.sh
             sudo -E ./run-tests.sh
