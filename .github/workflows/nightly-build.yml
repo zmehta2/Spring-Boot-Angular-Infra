@@ -210,14 +210,24 @@ jobs:
 
           # Add StrictHostKeyChecking=no to SSH command
           ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.PUBLIC_IP }} << EOF
+            # Make scripts executable
+            chmod +x *.sh
+
+            # Set environment variables
             export ECR_REGISTRY="${ECR_REGISTRY}"
             export TAG="${TAG}"
             export AWS_ACCESS_KEY_ID="${{ env.AWS_ACCESS_KEY_ID }}"
             export AWS_SECRET_ACCESS_KEY="${{ env.AWS_SECRET_ACCESS_KEY }}"
             export AWS_REGION="${{ env.AWS_REGION }}"
             export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
+
+            # Login to ECR
             ./ecr-login.sh
-            sudo docker-compose up -d
+
+            # Use the correct docker-compose file
+            sudo -E docker-compose -f docker-compose.test.yml up -d
+
+            # Run tests
             ./run-tests.sh
-            exit $?
+            exit \$?
           EOF
