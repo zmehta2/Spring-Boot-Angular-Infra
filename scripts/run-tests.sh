@@ -16,7 +16,7 @@ fi
 
 # Test frontend
 echo "Testing frontend..."
-FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80)
+FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4200)
 
 if [[ "$FRONTEND_STATUS" -ne 200 ]]; then
   echo "Frontend test failed with status $FRONTEND_STATUS"
