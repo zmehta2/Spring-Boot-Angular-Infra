@@ -56,7 +56,7 @@ jobs:
         id: launch-ec2
         run: |
           INSTANCE_ID=$(aws ec2 run-instances \
-            --image-id ami-0123456789abcdef \
+            --image-id ami-05b10e08d247fb927 \
             --instance-type t2.micro \
             --key-name ${{ secrets.EC2_KEY_NAME }} \
             --security-group-ids ${{ secrets.TEST_SG_ID }} \
