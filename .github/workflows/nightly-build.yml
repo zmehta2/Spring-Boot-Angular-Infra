@@ -1,6 +1,9 @@
 name: CI/CD Pipeline
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: '0 0 * * *'  # Nightly build at midnight
   workflow_dispatch:     # Manual trigger
