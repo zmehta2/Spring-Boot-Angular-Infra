@@ -1,6 +1,9 @@
 name: Smoke Test Deployment
 
-#on:
+on:
+  push:
+    branches:
+      - main
 #  workflow_run:
 #    workflows: ["Build and Push to ECR"]
 #    types:
