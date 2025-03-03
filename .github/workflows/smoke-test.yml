@@ -55,27 +55,13 @@ jobs:
       - name: Launch Test EC2 Instance
         id: launch-ec2
         run: |
-          USERDATA=$(cat <<'EOF'
-          #!/bin/bash
-            yum update -y
-            yum install -y docker
-            systemctl start docker
-            systemctl enable docker
-            curl -L "https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-            chmod +x /usr/local/bin/docker-compose
-            EOF
-            )
-          
-          # Base64 encode the user data
-          ENCODED_USERDATA=$(echo "$USERDATA" | base64 -w 0)
-          
           INSTANCE_ID=$(aws ec2 run-instances \
             --image-id ami-0123456789abcdef \
             --instance-type t2.micro \
             --key-name ${{ secrets.EC2_KEY_NAME }} \
             --security-group-ids ${{ secrets.TEST_SG_ID }} \
             --subnet-id ${{ secrets.PUBLIC_SUBNET_ID }} \
-            --user-data "$ENCODED_USERDATA" \
+            --user-data file://config/test-ec2-userdata.sh \
             --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=TestInstance-${BACKEND_TAG}}]" \
             --query 'Instances[0].InstanceId' \
             --output text)
