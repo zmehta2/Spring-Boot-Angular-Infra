@@ -213,52 +213,48 @@ jobs:
             
             # Add StrictHostKeyChecking=no to SSH command
             ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.PUBLIC_IP }} <<EOF
-            # Make scripts executable
-            chmod +x *.sh
-            
-            # Set environment variables
-            export ECR_REGISTRY="821625964871.dkr.ecr.us-east-1.amazonaws.com"
-            export TAG="cea4791"
-            export AWS_ACCESS_KEY_ID="${{ env.AWS_ACCESS_KEY_ID }}"
-            export AWS_SECRET_ACCESS_KEY="${{ env.AWS_SECRET_ACCESS_KEY }}"
-            export AWS_REGION="${{ env.AWS_REGION }}"
-            export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
-            
-            echo "AWS_REGION is set to $AWS_REGION"
-            echo "AWS_SESSION_TOKEN is set to $AWS_SESSION_TOKEN"
-            echo "ECR_REGISTRY is set to $ECR_REGISTRY"
-            echo "TAG is set to $TAG"
-            echo "Logging into ECR at $ECR_REGISTRY..."
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
-            
-            # Verify login worked by trying a direct pull
-            echo "Testing docker pull directly..."
-            
-#            # Create an environment file
-#            echo "ECR_REGISTRY=$ECR_REGISTRY" > .env
-#            echo "TAG=$TAG" >> .env
-            
-            # Use the correct docker-compose file
-            echo "Starting docker-compose with ECR_REGISTRY=$ECR_REGISTRY and TAG=$TAG"
-            docker-compose -f docker-compose.test.yml up -d
-            echo "Docker-compose up complete"
-            sleep 30
-            docker ps
-            
-            curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8080/springboot-crud-rest/api/v1/employees | grep -q 200 || exit 1
-            echo "✅ Backend code deployed successfully!"
-            
-            # Store test result
-            TEST_RESULT=$?
-            echo "::set-output name=test_result::$TEST_RESULT"
-            echo "TEST_RESULT=$TEST_RESULT" >> $GITHUB_ENV
-            
-            # For debugging
-            if [ $TEST_RESULT -eq 0 ]; then
-              echo "Tests passed successfully!"
-            else
-              echo "Tests failed with exit code $TEST_RESULT"
-            fi
+                # Make scripts executable
+                chmod +x *.sh
+                
+                # Set environment variables
+                export ECR_REGISTRY="821625964871.dkr.ecr.us-east-1.amazonaws.com"
+                export TAG="cea4791"
+                export AWS_ACCESS_KEY_ID="${{ env.AWS_ACCESS_KEY_ID }}"
+                export AWS_SECRET_ACCESS_KEY="${{ env.AWS_SECRET_ACCESS_KEY }}"
+                export AWS_REGION="${{ env.AWS_REGION }}"
+                export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
+                
+                echo "AWS_REGION is set to $AWS_REGION"
+                echo "AWS_SESSION_TOKEN is set to $AWS_SESSION_TOKEN"
+                echo "ECR_REGISTRY is set to $ECR_REGISTRY"
+                echo "TAG is set to $TAG"
+                echo "Logging into ECR at $ECR_REGISTRY..."
+                aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+                
+                # Verify login worked by trying a direct pull
+                echo "Testing docker pull directly..."
+                
+                # Use the correct docker-compose file
+                echo "Starting docker-compose with ECR_REGISTRY=$ECR_REGISTRY and TAG=$TAG"
+                docker-compose -f docker-compose.test.yml up -d
+                echo "Docker-compose up complete"
+                sleep 30
+                docker ps
+                
+                curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8080/springboot-crud-rest/api/v1/employees | grep -q 200 || exit 1
+                echo "✅ Backend code deployed successfully!"
+                
+                # Store test result
+                TEST_RESULT=$?
+                echo "::set-output name=test_result::$TEST_RESULT"
+                echo "TEST_RESULT=$TEST_RESULT" >> $GITHUB_ENV
+                
+                # For debugging
+                if [ $TEST_RESULT -eq 0 ]; then
+                  echo "Tests passed successfully!"
+                else
+                  echo "Tests failed with exit code $TEST_RESULT"
+                fi
             EOF
           
         continue-on-error: true
