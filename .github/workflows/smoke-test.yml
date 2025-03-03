@@ -64,8 +64,9 @@ jobs:
             --key-name ${{ secrets.EC2_KEY_NAME }} \
             --security-group-ids ${{ secrets.TEST_SG_ID }} \
             --subnet-id ${{ secrets.PUBLIC_SUBNET_ID }} \
+            --associate-public-ip-address \
             --user-data file://config/test-ec2-userdata.sh \
-            --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=TestInstance-${BACKEND_TAG}}]" \
+            --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=TestInstance}]" \
             --query 'Instances[0].InstanceId' \
             --output text)
           
