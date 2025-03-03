@@ -1,0 +1,147 @@
+name: Smoke Test Deployment
+
+on:
+  workflow_run:
+    workflows: ["Build and Push to ECR"]
+    types:
+      - completed
+    workflow_dispatch:
+      inputs:
+        backend_tag:
+          description: 'Backend image tag'
+          required: true
+        frontend_tag:
+          description: 'Frontend image tag'
+          required: true
+
+env:
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+
+jobs:
+  deploy_test:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Infrastructure Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+
+      - name: Set Image Tags
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "BACKEND_TAG=${{ github.event.client_payload.backend_tag }}" >> $GITHUB_ENV
+            echo "FRONTEND_TAG=${{ github.event.client_payload.frontend_tag }}" >> $GITHUB_ENV
+          else
+            echo "BACKEND_TAG=${{ github.event.inputs.backend_tag }}" >> $GITHUB_ENV
+            echo "FRONTEND_TAG=${{ github.event.inputs.frontend_tag }}" >> $GITHUB_ENV
+          fi
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2-key.pem
+          chmod 600 ~/.ssh/ec2-key.pem
+
+      - name: Launch Test EC2 Instance
+        id: launch-ec2
+        run: |
+          INSTANCE_ID=$(aws ec2 run-instances \
+            --image-id ami-0123456789abcdef \
+            --instance-type t2.micro \
+            --key-name ${{ secrets.EC2_KEY_NAME }} \
+            --security-group-ids ${{ secrets.TEST_SG_ID }} \
+            --subnet-id ${{ secrets.PUBLIC_SUBNET_ID }} \
+            --user-data file://config/test-ec2-userdata.sh \
+            --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=TestInstance-${BACKEND_TAG}}]" \
+            --query 'Instances[0].InstanceId' \
+            --output text)
+          
+          echo "::set-output name=instance_id::$INSTANCE_ID"
+          
+          # Wait for instance to be ready
+          aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID
+          
+          # Get public IP
+          PUBLIC_IP=$(aws ec2 describe-instances \
+            --instance-ids $INSTANCE_ID \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          
+          echo "::set-output name=public_ip::$PUBLIC_IP"
+
+      - name: Deploy and Test
+        id: deploy-test
+        env:
+          PUBLIC_IP: ${{ steps.launch-ec2.outputs.public_ip }}
+        run: |
+          # Copy scripts and config to EC2
+          scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no \
+            scripts/setup-docker.sh \
+            scripts/ecr-login.sh \
+            scripts/run-tests.sh \
+            templates/docker-compose.test.yml \
+            ec2-user@$PUBLIC_IP:~/
+          
+          # Run setup and tests
+          ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP << EOF
+            # Setup environment variables
+            export ECR_REGISTRY=$ECR_REGISTRY
+            export BACKEND_TAG=$BACKEND_TAG
+            export FRONTEND_TAG=$FRONTEND_TAG
+            export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+            export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            export AWS_REGION=${{ secrets.AWS_REGION }}
+            export AWS_SESSION_TOKEN=${{ secrets.AWS_SESSION_TOKEN }}
+          
+            # Install Docker
+            chmod +x setup-docker.sh
+            ./setup-docker.sh
+          
+            # Log into ECR
+            chmod +x ecr-login.sh
+            ./ecr-login.sh $AWS_REGION
+          
+            # Start containers
+            mv docker-compose.test.yml docker-compose.yml
+            docker-compose up -d
+          
+            # Run tests
+            chmod +x run-tests.sh
+            ./run-tests.sh
+            exit \$?
+          EOF
+          
+          # Store test result
+          TEST_RESULT=$?
+          echo "::set-output name=test_result::$TEST_RESULT"
+          exit $TEST_RESULT
+        continue-on-error: true
+
+      - name: Process Test Results
+        run: |
+          if [ "${{ steps.deploy-test.outputs.test_result }}" == "0" ]; then
+            # Tests passed, tag images as QA-ready
+            chmod +x scripts/tag-images.sh
+            ./scripts/tag-images.sh $BACKEND_TAG $FRONTEND_TAG
+            echo "Tests passed, images tagged as QA-ready"
+          else
+            # Tests failed, remove images
+            chmod +x scripts/remove-images.sh
+            ./scripts/remove-images.sh $BACKEND_TAG $FRONTEND_TAG
+            echo "Tests failed, images removed from ECR"
+            exit 1
+          fi
+
+      - name: Cleanup EC2 Instance
+        if: always()
+        run: |
+          aws ec2 terminate-instances --instance-ids ${{ steps.launch-ec2.outputs.instance_id }}
+          echo "Test EC2 instance terminated"
