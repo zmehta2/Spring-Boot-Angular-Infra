@@ -247,5 +247,109 @@ jobs:
 
             # Run tests
             ./run-tests.sh
-#            exit \$?
+            exit \$?
           EOF
+          
+          It seems like there are multiple issues with your Process Test Results step:
+
+          Accessing Step Outputs: You're trying to use steps.deploy-test.outputs.test_result, but you're not correctly setting this output in your deploy-test step.
+          Environment Variable Issue: Your test result is being stored as an environment variable but not used correctly in your workflow.
+
+          Here's how to fix the complete section:
+          yamlCopy- name: Deploy and Test
+            id: deploy-test
+            run: |
+              TAG="${{ needs.build.outputs.image_tag }}"
+              # Add StrictHostKeyChecking=no to SCP command
+              scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no scripts/*.sh templates/docker-compose.test.yml ec2-user@${{ env.PUBLIC_IP }}:/home/ec2-user/
+
+              # Add StrictHostKeyChecking=no to SSH command
+              ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.PUBLIC_IP }} << EOF
+                # Make scripts executable
+                chmod +x *.sh
+
+                # Set environment variables
+                export ECR_REGISTRY="821625964871.dkr.ecr.us-east-1.amazonaws.com"
+                export TAG="cea4791"
+                export AWS_ACCESS_KEY_ID="${{ env.AWS_ACCESS_KEY_ID }}"
+                export AWS_SECRET_ACCESS_KEY="${{ env.AWS_SECRET_ACCESS_KEY }}"
+                export AWS_REGION="${{ env.AWS_REGION }}"
+                export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
+
+                echo "AWS_REGION is set to $AWS_REGION"
+                echo "ECR_REGISTRY is set to $ECR_REGISTRY"
+                echo "TAG is set to $TAG"
+                echo "Logging into ECR at $ECR_REGISTRY..."
+                aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+                # Verify login worked by trying a direct pull
+                echo "Testing docker pull directly..."
+                docker pull $ECR_REGISTRY/backend:$TAG || echo "Direct pull failed"
+                docker pull $ECR_REGISTRY/frontend:$TAG || echo "Direct frontend pull failed"
+
+                # Create an environment file
+                echo "ECR_REGISTRY=$ECR_REGISTRY" > .env
+                echo "TAG=$TAG" >> .env
+
+                # Use the correct docker-compose file
+                echo "Starting docker-compose with ECR_REGISTRY=$ECR_REGISTRY and TAG=$TAG"
+                # Use the file we copied over (docker-compose.test.yml)
+                docker-compose -f docker-compose.test.yml --env-file .env up -d
+
+                # Run tests
+                ./run-tests.sh
+                exit \$?
+              EOF
+
+              # Store test result
+              TEST_RESULT=$?
+              echo "::set-output name=test_result::$TEST_RESULT"
+              echo "TEST_RESULT=$TEST_RESULT" >> $GITHUB_ENV
+
+              # For debugging
+              if [ $TEST_RESULT -eq 0 ]; then
+                echo "Tests passed successfully!"
+              else
+                echo "Tests failed with exit code $TEST_RESULT"
+              fi
+            continue-on-error: true
+
+          - name: Process Test Results
+            run: |
+              echo "Test result was: ${{ env.TEST_RESULT }}"
+
+              if [ "${{ env.TEST_RESULT }}" == "0" ]; then
+                # Tests passed, tag images as QA-ready
+                echo "Creating tag-images.sh script..."
+                cat > scripts/tag-images.sh << 'EOF'
+                #!/bin/bash
+                aws ecr batch-get-image --repository-name backend --image-ids imageTag=$1 --query 'images[].imageManifest' --output text | aws ecr put-image --repository-name backend --image-tag QA-ready --image-manifest -
+                aws ecr batch-get-image --repository-name frontend --image-ids imageTag=$2 --query 'images[].imageManifest' --output text | aws ecr put-image --repository-name frontend --image-tag QA-ready --image-manifest -
+                EOF
+                chmod +x scripts/tag-images.sh
+
+                echo "Tagging images as QA-ready..."
+                ./scripts/tag-images.sh "${{ needs.build.outputs.image_tag }}" "${{ needs.build.outputs.image_tag }}"
+                echo "Tests passed, images tagged as QA-ready"
+              else
+                # Tests failed, remove images
+                echo "Creating remove-images.sh script..."
+                cat > scripts/remove-images.sh << 'EOF'
+                #!/bin/bash
+                aws ecr batch-delete-image --repository-name backend --image-ids imageTag=$1
+                aws ecr batch-delete-image --repository-name frontend --image-ids imageTag=$2
+                EOF
+                chmod +x scripts/remove-images.sh
+
+                echo "Removing failed images..."
+                ./scripts/remove-images.sh "${{ needs.build.outputs.image_tag }}" "${{ needs.build.outputs.image_tag }}"
+                echo "Tests failed, images removed from ECR"
+                exit 1
+              fi
+
+          - name: Cleanup EC2 Instance
+            if: always()
+            run: |
+              echo "Terminating EC2 instance ${{ env.INSTANCE_ID }}"
+              aws ec2 terminate-instances --instance-ids ${{ env.INSTANCE_ID }}
+              echo "Test EC2 instance terminated"
