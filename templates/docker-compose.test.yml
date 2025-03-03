@@ -32,7 +32,7 @@ services:
     image: ${ECR_REGISTRY}/frontend:${FRONTEND_TAG}
     container_name: frontend
     ports:
-      - "80:80"
+      - "4200:4200"
     depends_on:
       - backend
     networks:
