@@ -252,7 +252,7 @@ jobs:
           # Run tests
           echo "Running tests..."
           ./run-tests.sh
-          exit \$?
+#          exit \$?
           EOF
             
           # Store test result
