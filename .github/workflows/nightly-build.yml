@@ -263,6 +263,8 @@ jobs:
           else
             echo "Tests failed with exit code $TEST_RESULT"
           fi
+          EOF
+
         continue-on-error: true
 
       - name: Process Test Results
