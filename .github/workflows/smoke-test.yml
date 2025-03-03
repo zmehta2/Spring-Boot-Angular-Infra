@@ -72,8 +72,8 @@ jobs:
           
           echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
           
-          # Wait for instance to be ready
-          aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+          echo "Waiting for EC2 instance to be ready..."
+          sleep 30
           
           # Get public IP
           PUBLIC_IP=$(aws ec2 describe-instances \
