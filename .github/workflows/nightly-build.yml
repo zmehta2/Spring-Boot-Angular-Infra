@@ -34,18 +34,50 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
+      - name: Set Image Tags
+        run: |
+          # For development/feature branches
+          if [[ "$GITHUB_REF" != "refs/heads/main" && "$GITHUB_REF" != "refs/heads/master" ]]; then
+            BRANCH=${GITHUB_REF##*/}
+            TAG="${BRANCH}-$(git rev-parse --short HEAD)"
+
+          # For release branches
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+
+          # For main/master branch
+          else
+            TAG=$(git rev-parse --short HEAD)
+          fi
+
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+          # Always tag with "latest" for the main branch as well
+          if [[ "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/master" ]]; then
+            echo "LATEST_TAG=latest" >> $GITHUB_ENV
+          fi
+
       - name: Build and Tag Docker Images
         run: |
-          # Generate timestamp for image tagging
-          TIMESTAMP=$(date +"%Y%m%d%H%M%S")
-          echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
-          
           # Build backend image
-          docker build -t $ECR_REGISTRY/backend:$TIMESTAMP ./springboot2-jpa-crud-example
-          
+          docker build -t $ECR_REGISTRY/backend:$TAG ./springboot2-jpa-crud-example
+
           # Build frontend image
-          docker build -t $ECR_REGISTRY/frontend:$TIMESTAMP ./angular8-springboot-client
-          
-          # Push images to ECR
-          docker push $ECR_REGISTRY/backend:$TIMESTAMP
-          docker push $ECR_REGISTRY/frontend:$TIMESTAMP
+          docker build -t $ECR_REGISTRY/frontend:$TAG ./angular8-springboot-client
+
+          # Tag with latest if on main branch
+          if [[ -n "${{ env.LATEST_TAG }}" ]]; then
+            docker tag $ECR_REGISTRY/backend:$TAG $ECR_REGISTRY/backend:latest
+            docker tag $ECR_REGISTRY/frontend:$TAG $ECR_REGISTRY/frontend:latest
+          fi
+
+      - name: Push Images to ECR
+        run: |
+          docker push $ECR_REGISTRY/backend:$TAG
+          docker push $ECR_REGISTRY/frontend:$TAG
+
+          # Push latest tags if on main branch
+          if [[ -n "${{ env.LATEST_TAG }}" ]]; then
+            docker push $ECR_REGISTRY/backend:latest
+            docker push $ECR_REGISTRY/frontend:latest
+          fi
