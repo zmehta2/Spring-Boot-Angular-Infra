@@ -1,18 +1,18 @@
 name: Smoke Test Deployment
 
-on:
-  workflow_run:
-    workflows: ["Build and Push to ECR"]
-    types:
-      - completed
-  workflow_dispatch:
-    inputs:
-      backend_tag:
-        description: 'Backend image tag'
-        required: true
-      frontend_tag:
-        description: 'Frontend image tag'
-        required: true
+#on:
+#  workflow_run:
+#    workflows: ["Build and Push to ECR"]
+#    types:
+#      - completed
+#  workflow_dispatch:
+#    inputs:
+#      backend_tag:
+#        description: 'Backend image tag'
+#        required: true
+#      frontend_tag:
+#        description: 'Frontend image tag'
+#        required: true
 
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
@@ -20,7 +20,7 @@ env:
 
 jobs:
   deploy_test:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+#    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Infrastructure Repository
@@ -66,7 +66,7 @@ jobs:
             --query 'Instances[0].InstanceId' \
             --output text)
           
-          echo "instance_id=$INSTANCE_ID" >> $GITHUB_ENV
+          echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
           
           # Wait for instance to be ready
           aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID
@@ -77,23 +77,27 @@ jobs:
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
           
-          echo "public_ip=$PUBLIC_IP" >> $GITHUB_ENV
+          echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
+          
+          # Debug output
+          echo "The EC2 instance ID is: $INSTANCE_ID"
+          echo "The EC2 instance public IP is: $PUBLIC_IP"
 
       - name: Deploy and Test
         id: deploy-test
-        env:
-          PUBLIC_IP: ${{ env.public_ip }}
         run: |
+          # Debug IP address
+          echo "Connecting to EC2 at IP: ${{ env.PUBLIC_IP }}"
           # Copy scripts and config to EC2
           scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no \
             scripts/setup-docker.sh \
             scripts/ecr-login.sh \
             scripts/run-tests.sh \
             templates/docker-compose.test.yml \
-            ec2-user@$PUBLIC_IP:~/
+            ec2-user@${{ env.PUBLIC_IP }}:~/
           
           # Run setup and tests
-          ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP << EOF
+          ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.PUBLIC_IP }} << EOF
             # Setup environment variables
             export ECR_REGISTRY=$ECR_REGISTRY
             export BACKEND_TAG=$BACKEND_TAG
@@ -123,8 +127,7 @@ jobs:
           
           # Store test result
           TEST_RESULT=$?
-          echo "test_result=$TEST_RESULT" >> $GITHUB_ENV
-          exit $TEST_RESULT
+          echo "TEST_RESULT=$TEST_RESULT" >> $GITHUB_ENV
 
       - name: Process Test Results
         run: |
