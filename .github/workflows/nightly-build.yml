@@ -222,19 +222,23 @@ jobs:
             export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
           
             # Login to ECR with more debug info
-            echo "Logging into ECR at \$ECR_REGISTRY..."
-            aws ecr get-login-password --region \$AWS_REGION | docker login --username AWS --password-stdin \$ECR_REGISTRY
-          
+            ECR_REGISTRY="821625964871.dkr.ecr.us-east-1.amazonaws.com"
+            TAG="cea4791"
+            AWS_REGION="us-east-1"
+            
+            echo "Logging into ECR at $ECR_REGISTRY..."
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+            
             # Verify login worked by trying a direct pull
             echo "Testing docker pull directly..."
-            sudo docker pull \$ECR_REGISTRY/backend:\$TAG || echo "Direct pull failed"
-          
+            sudo docker pull $ECR_REGISTRY/backend:$TAG || echo "Direct pull failed"
+            
             # Create a .env file for docker-compose
-            echo "ECR_REGISTRY=\$ECR_REGISTRY" > .env
-            echo "TAG=\$TAG" >> .env
-          
+            echo "ECR_REGISTRY=$ECR_REGISTRY" > .env
+            echo "TAG=$TAG" >> .env
+            
             # Use the correct docker-compose file with .env file
-            echo "Starting docker-compose with ECR_REGISTRY=\$ECR_REGISTRY and TAG=\$TAG"
+            echo "Starting docker-compose with ECR_REGISTRY=$ECR_REGISTRY and TAG=$TAG"
             sudo -E docker-compose -f docker-compose.test.yml --env-file .env up -d
           
             # Run tests
