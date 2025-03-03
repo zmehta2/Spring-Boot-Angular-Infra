@@ -205,8 +205,11 @@ jobs:
         id: deploy-test
         run: |
           TAG="${{ needs.build.outputs.image_tag }}"
-          scp -i ~/.ssh/ec2-key.pem scripts/*.sh templates/docker-compose.test.yml ec2-user@${{ env.PUBLIC_IP }}:/home/ec2-user/
-          ssh -i ~/.ssh/ec2-key.pem ec2-user@${{ env.PUBLIC_IP }} << EOF
+          # Add StrictHostKeyChecking=no to SCP command
+          scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no scripts/*.sh templates/docker-compose.test.yml ec2-user@${{ env.PUBLIC_IP }}:/home/ec2-user/
+
+          # Add StrictHostKeyChecking=no to SSH command
+          ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.PUBLIC_IP }} << EOF
             export ECR_REGISTRY="${ECR_REGISTRY}"
             export TAG="${TAG}"
             export AWS_ACCESS_KEY_ID="${{ env.AWS_ACCESS_KEY_ID }}"
