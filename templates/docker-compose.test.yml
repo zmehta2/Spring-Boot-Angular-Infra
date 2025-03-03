@@ -18,8 +18,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
-    networks:
-      - app-network
 
 
   backend:
@@ -34,9 +32,8 @@ services:
       MYSQL_PASSWORD: ""
       MYSQL_PORT: 3306
     depends_on:
-      - mysqldb
-    networks:
-      - app-network
+      mysqldb:
+        condition: service_healthy
 
   frontend:
     image: 821625964871.dkr.ecr.us-east-1.amazonaws.com/frontend:latest
@@ -45,8 +42,6 @@ services:
       - "4200:4200"
     depends_on:
       - backend
-    networks:
-      - app-network
 
 volumes:
   my-db:
