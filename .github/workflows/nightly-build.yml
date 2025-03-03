@@ -207,12 +207,12 @@ jobs:
           TAG="${{ needs.build.outputs.image_tag }}"
           # Add StrictHostKeyChecking=no to SCP command
           scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no scripts/*.sh templates/docker-compose.test.yml ec2-user@${{ env.PUBLIC_IP }}:/home/ec2-user/
-
+          
           # Add StrictHostKeyChecking=no to SSH command
           ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.PUBLIC_IP }} << EOF
             # Make scripts executable
             chmod +x *.sh
-
+          
             # Set environment variables
             export ECR_REGISTRY="${ECR_REGISTRY}"
             export TAG="${TAG}"
@@ -220,13 +220,23 @@ jobs:
             export AWS_SECRET_ACCESS_KEY="${{ env.AWS_SECRET_ACCESS_KEY }}"
             export AWS_REGION="${{ env.AWS_REGION }}"
             export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
-
-            # Login to ECR
-            ./ecr-login.sh
-
-            # Use the correct docker-compose file
-            sudo -E docker-compose -f docker-compose.test.yml up -d
-
+          
+            # Login to ECR with more debug info
+            echo "Logging into ECR at \$ECR_REGISTRY..."
+            aws ecr get-login-password --region \$AWS_REGION | docker login --username AWS --password-stdin \$ECR_REGISTRY
+          
+            # Verify login worked by trying a direct pull
+            echo "Testing docker pull directly..."
+            sudo docker pull \$ECR_REGISTRY/backend:\$TAG || echo "Direct pull failed"
+          
+            # Create a .env file for docker-compose
+            echo "ECR_REGISTRY=\$ECR_REGISTRY" > .env
+            echo "TAG=\$TAG" >> .env
+          
+            # Use the correct docker-compose file with .env file
+            echo "Starting docker-compose with ECR_REGISTRY=\$ECR_REGISTRY and TAG=\$TAG"
+            sudo -E docker-compose -f docker-compose.test.yml --env-file .env up -d
+          
             # Run tests
             ./run-tests.sh
             exit \$?
