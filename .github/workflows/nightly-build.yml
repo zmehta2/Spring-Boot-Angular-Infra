@@ -244,7 +244,7 @@ jobs:
             echo "Starting docker-compose with ECR_REGISTRY=$ECR_REGISTRY and TAG=$TAG"
             docker-compose -f docker-compose.test.yml up -d
             echo "Docker-compose up complete"
-            sleep 10
+            sleep 30
             docker ps
             
             curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8080/springboot-crud-rest/api/v1/employees | grep -q 200 || exit 1
