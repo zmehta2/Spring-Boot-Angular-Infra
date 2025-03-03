@@ -252,11 +252,8 @@ jobs:
 
           # Run tests
           echo "Running tests..."
-#          ./run-tests.sh
-#          exit \$?
           curl -s -o /dev/null -w "%{http_code}" http://localhost:8080//springboot-crud-rest/api/v1/employees | grep -q 200 || exit 1
           echo "Backend test successfull with status 200"
-          EOF
             
           # Store test result
           TEST_RESULT=$?
