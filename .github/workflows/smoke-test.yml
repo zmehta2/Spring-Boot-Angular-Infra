@@ -113,19 +113,19 @@ jobs:
           
             # Install Docker
             chmod +x setup-docker.sh
-            ./setup-docker.sh
+            sudo ./setup-docker.sh
           
             # Log into ECR
             chmod +x ecr-login.sh
-            ./ecr-login.sh $AWS_REGION
+            sudo -E ./ecr-login.sh $AWS_REGION
           
             # Start containers
             mv docker-compose.test.yml docker-compose.yml
-            docker-compose up -d
+            sudo -E docker-compose up -d
           
             # Run tests
             chmod +x run-tests.sh
-            ./run-tests.sh
+            sudo -E ./run-tests.sh
             exit \$?
           EOF
           
