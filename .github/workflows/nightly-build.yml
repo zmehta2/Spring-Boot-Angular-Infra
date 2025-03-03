@@ -1,0 +1,46 @@
+name: Build and Push to ECR
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Nightly build at midnight
+  workflow_dispatch:     # Manual trigger
+
+env:
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Repository
+        uses: actions/checkout@v4
+        with:
+          repository: "zmehta2/Spring-Boot-Angular-8-CRUD-Example"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Tag Docker Images
+        run: |
+          # Generate timestamp for image tagging
+          TIMESTAMP=$(date +"%Y%m%d%H%M%S")
+          echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+          
+          # Build backend image
+          docker build -t $ECR_REGISTRY/backend:$TIMESTAMP ./springboot2-jpa-crud-example
+          
+          # Build frontend image
+          docker build -t $ECR_REGISTRY/frontend:$TIMESTAMP ./angular8-springboot-client
+          
+          # Push images to ECR
+          docker push $ECR_REGISTRY/backend:$TIMESTAMP
+          docker push $ECR_REGISTRY/frontend:$TIMESTAMP
