@@ -233,12 +233,10 @@ jobs:
             
             # Verify login worked by trying a direct pull
             echo "Testing docker pull directly..."
-            docker pull 821625964871.dkr.ecr.us-east-1.amazonaws.com/backend:"cea4791" || echo "Direct pull failed"
-            docker pull 821625964871.dkr.ecr.us-east-1.amazonaws.com/frontend:"cea4791" || echo "Direct frontend pull failed"
             
-            # Create an environment file
-            echo "ECR_REGISTRY=$ECR_REGISTRY" > .env
-            echo "TAG=$TAG" >> .env
+#            # Create an environment file
+#            echo "ECR_REGISTRY=$ECR_REGISTRY" > .env
+#            echo "TAG=$TAG" >> .env
             
             # Use the correct docker-compose file
             echo "Starting docker-compose with ECR_REGISTRY=$ECR_REGISTRY and TAG=$TAG"
