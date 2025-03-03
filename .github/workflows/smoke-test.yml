@@ -5,14 +5,14 @@ on:
     workflows: ["Build and Push to ECR"]
     types:
       - completed
-    workflow_dispatch:
-      inputs:
-        backend_tag:
-          description: 'Backend image tag'
-          required: true
-        frontend_tag:
-          description: 'Frontend image tag'
-          required: true
+  workflow_dispatch:
+    inputs:
+      backend_tag:
+        description: 'Backend image tag'
+        required: true
+      frontend_tag:
+        description: 'Frontend image tag'
+        required: true
 
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
@@ -59,12 +59,12 @@ jobs:
             --key-name ${{ secrets.EC2_KEY_NAME }} \
             --security-group-ids ${{ secrets.TEST_SG_ID }} \
             --subnet-id ${{ secrets.PUBLIC_SUBNET_ID }} \
-            --user-data file://${{ github.workspace }}/config/test-ec2-userdata.sh \
+            --user-data file://config/test-ec2-userdata.sh \
             --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=TestInstance-${BACKEND_TAG}}]" \
             --query 'Instances[0].InstanceId' \
             --output text)
           
-          echo "::set-output name=instance_id::$INSTANCE_ID"
+          echo "instance_id=$INSTANCE_ID" >> $GITHUB_ENV
           
           # Wait for instance to be ready
           aws ec2 wait instance-status-ok --instance-ids $INSTANCE_ID
@@ -75,12 +75,12 @@ jobs:
             --query 'Reservations[0].Instances[0].PublicIpAddress' \
             --output text)
           
-          echo "::set-output name=public_ip::$PUBLIC_IP"
+          echo "public_ip=$PUBLIC_IP" >> $GITHUB_ENV
 
       - name: Deploy and Test
         id: deploy-test
         env:
-          PUBLIC_IP: ${{ steps.launch-ec2.outputs.public_ip }}
+          PUBLIC_IP: ${{ env.public_ip }}
         run: |
           # Copy scripts and config to EC2
           scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no \
@@ -121,13 +121,12 @@ jobs:
           
           # Store test result
           TEST_RESULT=$?
-          echo "::set-output name=test_result::$TEST_RESULT"
+          echo "test_result=$TEST_RESULT" >> $GITHUB_ENV
           exit $TEST_RESULT
-        continue-on-error: true
 
       - name: Process Test Results
         run: |
-          if [ "${{ steps.deploy-test.outputs.test_result }}" == "0" ]; then
+          if [ "${{ env.test_result }}" == "0" ]; then
             # Tests passed, tag images as QA-ready
             chmod +x scripts/tag-images.sh
             ./scripts/tag-images.sh $BACKEND_TAG $FRONTEND_TAG
@@ -143,5 +142,5 @@ jobs:
       - name: Cleanup EC2 Instance
         if: always()
         run: |
-          aws ec2 terminate-instances --instance-ids ${{ steps.launch-ec2.outputs.instance_id }}
+          aws ec2 terminate-instances --instance-ids ${{ env.instance_id }}
           echo "Test EC2 instance terminated"
