@@ -17,6 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: "zmehta2/Spring-Boot-Angular-8-CRUD-Example"
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
