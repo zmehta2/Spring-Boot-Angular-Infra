@@ -6,7 +6,7 @@ services:
       MYSQL_DATABASE: users_database
       MYSQL_ROOT_PASSWORD: root
     volumes:
-      - my-db:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - 3307:3306
@@ -40,14 +40,14 @@ services:
     image: 821625964871.dkr.ecr.us-east-1.amazonaws.com/frontend:latest
     container_name: frontend
     ports:
-      - "4200:4200"
+      - "4200:80"
     depends_on:
       - backend
     networks:
         - app-network
 
 volumes:
-  my-db:
+    mysql_data:
 
 networks:
   app-network:
