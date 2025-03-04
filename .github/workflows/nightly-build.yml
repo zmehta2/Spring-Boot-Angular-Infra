@@ -190,6 +190,10 @@ jobs:
                 export AWS_REGION="${{ env.AWS_REGION }}"
                 export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
                 
+                # RDS credentials
+                export MYSQL_USER="${{ secrets.MYSQL_USER }}"
+                export MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
+                
                 echo "AWS_REGION is set to $AWS_REGION"
                 echo "AWS_SESSION_TOKEN is set to $AWS_SESSION_TOKEN"
                 echo "ECR_REGISTRY is set to $ECR_REGISTRY"
@@ -207,9 +211,12 @@ jobs:
                 sleep 30
                 docker ps
                 
+                # Test RDS connectivity
+#                echo "Testing RDS connectivity..."
+#                docker exec backend curl -s http://localhost:8080/api/health || echo "RDS connection test failed"
+          
                 curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8080/springboot-crud-rest/api/v1/employees | grep -q 200 || exit 1
                 echo "✅ Backend code deployed successfully!"
-                
             EOF
 #      - name: Process Test Results
 #        if: failure()
