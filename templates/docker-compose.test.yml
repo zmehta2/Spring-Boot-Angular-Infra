@@ -32,7 +32,7 @@ services:
       MYSQL_PORT: 3306
       MYSQL_DATABASE: users_database
     depends_on:
-      redis:
+      mysqldb:
         condition: service_healthy
     networks:
       - app-network
