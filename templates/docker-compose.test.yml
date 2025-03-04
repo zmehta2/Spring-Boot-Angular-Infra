@@ -27,8 +27,14 @@ services:
       - redis_data:/data
       - ./init-redis.sh:/init-redis.sh
     command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     networks:
-      - app-network
+        - app-network
 
   backend:
     image: 821625964871.dkr.ecr.us-east-1.amazonaws.com/backend:latest
