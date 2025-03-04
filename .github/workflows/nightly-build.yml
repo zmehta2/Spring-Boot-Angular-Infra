@@ -211,10 +211,6 @@ jobs:
                 sleep 30
                 docker ps
                 
-                # Test RDS connectivity
-#                echo "Testing RDS connectivity..."
-#                docker exec backend curl -s http://localhost:8080/api/health || echo "RDS connection test failed"
-          
                 curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8080/springboot-crud-rest/api/v1/employees | grep -q 200 || exit 1
                 echo "✅ Backend code deployed successfully!"
             EOF
