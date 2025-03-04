@@ -209,7 +209,8 @@ jobs:
         run: |
             TAG="${{ needs.build.outputs.image_tag }}"
             # Add StrictHostKeyChecking=no to SCP command
-            scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no scripts/*.sh /init.sql templates/docker-compose.test.yml ec2-user@${{ env.PUBLIC_IP }}:~/
+          # If init.sql is in the parent directory or another location
+          scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no scripts/*.sh init.sql templates/docker-compose.test.yml ec2-user@${{ env.PUBLIC_IP }}:~/
             
             # Add StrictHostKeyChecking=no to SSH command
             ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.PUBLIC_IP }} <<EOF
