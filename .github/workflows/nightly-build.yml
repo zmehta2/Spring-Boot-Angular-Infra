@@ -165,40 +165,6 @@ jobs:
             sleep 10
           done
 
-      - name: Create Test Scripts
-        run: |
-          mkdir -p scripts templates
-          cat > scripts/ecr-login.sh << 'EOF'
-          #!/bin/bash
-          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
-          EOF
-          cat > scripts/run-tests.sh << 'EOF'
-          #!/bin/bash
-          sleep 20
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4200)
-          BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/employees)
-          if [[ "$FRONTEND_STATUS" -ne 200 || "$BACKEND_STATUS" -ne 200 ]]; then
-            exit 1
-          fi
-          exit 0
-          EOF
-          cat > templates/docker-compose.test.yml << 'EOF'
-          version: '3'
-          services:
-            mysqldb:
-              image: mysql:8.0
-              environment:
-                MYSQL_DATABASE: users_database
-                MYSQL_ROOT_PASSWORD: test_password
-            backend:
-              image: ${ECR_REGISTRY}/backend:${TAG}
-              environment:
-                MYSQL_HOST: mysqldb
-                MYSQL_USER: root
-                MYSQL_PASSWORD: test_password
-            frontend:
-              image: ${ECR_REGISTRY}/frontend:${TAG}
-          EOF
 
       - name: Wait for Instance Setup
         run: |
@@ -208,10 +174,10 @@ jobs:
         id: deploy-test
         run: |
             TAG="${{ needs.build.outputs.image_tag }}"
+          
             # Add StrictHostKeyChecking=no to SCP command
             scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no scripts/*.sh init.sql templates/docker-compose.test.yml ec2-user@${{ env.PUBLIC_IP }}:~/
             
-            # Add StrictHostKeyChecking=no to SSH command
             ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.PUBLIC_IP }} <<EOF
                 # Make scripts executable
                 chmod +x *.sh
