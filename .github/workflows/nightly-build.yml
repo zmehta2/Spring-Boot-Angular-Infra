@@ -174,6 +174,8 @@ jobs:
       - name: Deploy and Test
         id: deploy-test
         continue-on-error: true
+        outputs:
+          test_status: ${{ steps.deploy-test.outputs.status }}
         run: |
             TAG="${{ needs.build.outputs.image_tag }}"
           
@@ -251,7 +253,7 @@ jobs:
   deploy_to_qa:
     needs: [build, smoke_test]
     runs-on: ubuntu-latest
-    if: needs.smoke_test.outputs.test_status == 'success'
+    if: needs.smoke_test.outputs.status == 'success'
     steps:
       - name: Checkout Infrastructure Repository
         uses: actions/checkout@v4
@@ -311,28 +313,4 @@ jobs:
           
             echo "✅ QA deployment completed successfully!"
           EOF
-#      - name: Process Test Results
-#        if: failure()
-#        run: |
-#            echo "Smoke test failed. Cleaning up Docker images in ECR..."
-#            # Tests failed, remove images
-#            echo "Creating remove-images.sh script..."
-#            cat > scripts/remove-images.sh << 'EOF'
-#            #!/bin/bash
-#            aws ecr batch-delete-image --repository-name backend --image-ids imageTag=$1
-#            aws ecr batch-delete-image --repository-name frontend --image-ids imageTag=$2
-#            EOF
-#            chmod +x scripts/remove-images.sh
-#
-#            echo "Removing failed images..."
-#            ./scripts/remove-images.sh "${{ needs.build.outputs.image_tag }}" "${{ needs.build.outputs.image_tag }}"
-#            echo "Tests failed, images removed from ECR"
-#            exit 1
-#
-#      - name: Cleanup EC2 Instance
-#        if: always()
-#        run: |
-#            echo "Terminating EC2 instance ${{ env.INSTANCE_ID }}"
-#            aws ec2 terminate-instances --instance-ids ${{ env.INSTANCE_ID }}
-#            echo "Test EC2 instance terminated"
-          
+
