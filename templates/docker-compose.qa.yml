@@ -1,24 +1,4 @@
 services:
-#  mysqldb:
-#    image: mysql:8.0
-#    restart: always
-#    environment:
-#      MYSQL_DATABASE: users_database
-#      MYSQL_ROOT_PASSWORD: root
-#    volumes:
-#      - mysql_data:/var/lib/mysql
-#      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-#    ports:
-#      - 3307:3306
-#    healthcheck:
-#      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
-#      interval: 10s
-#      timeout: 5s
-#      retries: 3
-#      start_period: 40s
-#    networks:
-#        - app-network
-
   backend:
     image: 821625964871.dkr.ecr.us-east-1.amazonaws.com/backend:latest
     container_name: backend
@@ -32,9 +12,6 @@ services:
       MYSQL_PORT: 3306
       MYSQL_DATABASE: users_database
       SPRING_PROFILES_ACTIVE: test
-#    depends_on:
-#      mysqldb:
-#        condition: service_healthy
     networks:
       - app-network
 
@@ -46,10 +23,7 @@ services:
     depends_on:
       - backend
     networks:
-        - app-network
-
-#volumes:
-#  mysql_data:
+      - app-network
 
 networks:
   app-network:

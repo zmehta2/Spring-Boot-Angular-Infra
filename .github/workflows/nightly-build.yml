@@ -24,6 +24,7 @@ env:
   EC2_KEY_NAME: ${{ secrets.EC2_KEY_NAME }}
   TEST_SG_ID: ${{ secrets.TEST_SG_ID }}
   PUBLIC_SUBNET_ID: ${{ secrets.PUBLIC_SUBNET_ID }}
+  QA_EC2_IP: ${{ secrets.QA_EC2_IP }}
 
 jobs:
   build:
@@ -214,6 +215,128 @@ jobs:
                 curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8080/springboot-crud-rest/api/v1/employees | grep -q 200 || exit 1
                 echo "✅ Backend code deployed successfully!"
             EOF
+            #Store test result
+            TEST_RESULT=$?
+            if [ $TEST_RESULT -eq 0 ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "Smoke tests passed!"
+            else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "Smoke tests failed!"
+            fi
+            continue-on-error: true
+            id: test-result
+
+      - name: Tag Images as QA-Ready
+        if: steps.test-result.outputs.status == 'success'
+        run: |
+            # Tag backend image for QA
+            aws ecr batch-get-image \
+              --repository-name backend \
+              --image-ids imageTag=${{ needs.build.outputs.image_tag }} \
+              --query 'images[].imageManifest' \
+              --output text | aws ecr put-image \
+              --repository-name backend \
+              --image-tag QA-ready \
+              --image-manifest -
+            
+            # Tag frontend image for QA
+            aws ecr batch-get-image \
+              --repository-name frontend \
+              --image-ids imageTag=${{ needs.build.outputs.image_tag }} \
+              --query 'images[].imageManifest' \
+              --output text | aws ecr put-image \
+              --repository-name frontend \
+              --image-tag QA-ready \
+              --image-manifest -
+            
+            echo "Images tagged as QA-ready"
+
+      - name: Remove Failed Images
+        if: steps.test-result.outputs.status != 'success'
+        run: |
+            # Remove backend image
+            aws ecr batch-delete-image \
+              --repository-name backend \
+              --image-ids imageTag=${{ needs.build.outputs.image_tag }}
+            
+            # Remove frontend image
+            aws ecr batch-delete-image \
+              --repository-name frontend \
+              --image-ids imageTag=${{ needs.build.outputs.image_tag }}
+            
+            echo "Failed images removed from ECR"
+
+      - name: Cleanup EC2 Instance
+        if: always()
+        run: |
+            echo "Terminating EC2 instance ${{ env.INSTANCE_ID }}"
+            aws ec2 terminate-instances --instance-ids ${{ env.INSTANCE_ID }}
+            echo "Test EC2 instance terminated"
+
+  deploy_to_qa:
+    needs: [build, smoke_test]
+    runs-on: ubuntu-latest
+    if: needs.smoke_test.outputs.test_status == 'success'
+    steps:
+      - name: Checkout Infrastructure Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ env.PAT_TOKEN }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ env.EC2_SSH_KEY }}" > ~/.ssh/ec2-key.pem
+          chmod 600 ~/.ssh/ec2-key.pem
+
+      - name: Deploy to QA EC2
+        run: |
+          # Copy docker-compose-qa.yml to QA EC2
+          scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no templates/docker-compose-qa.yml ec2-user@${{ env.QA_EC2_IP }}:~/docker-compose.yml
+          
+          # Deploy to QA
+          ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.QA_EC2_IP }} << EOF
+            # Set environment variables
+            export ECR_REGISTRY="821625964871.dkr.ecr.us-east-1.amazonaws.com"
+            export AWS_ACCESS_KEY_ID="${{ env.AWS_ACCESS_KEY_ID }}"
+            export AWS_SECRET_ACCESS_KEY="${{ env.AWS_SECRET_ACCESS_KEY }}"
+            export AWS_REGION="${{ env.AWS_REGION }}"
+            export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
+          
+            # RDS credentials
+            export MYSQL_USER="${{ secrets.MYSQL_USER }}"
+            export MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
+          
+            # Login to ECR
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+          
+            # Pull QA-ready images
+            echo "Pulling QA-ready images..."
+            docker pull $ECR_REGISTRY/backend:QA-ready
+            docker pull $ECR_REGISTRY/frontend:QA-ready
+          
+            # Create .env file with necessary variables
+            echo "ECR_REGISTRY=$ECR_REGISTRY" > .env
+            echo "MYSQL_USER=$MYSQL_USER" >> .env
+            echo "MYSQL_PASSWORD=$MYSQL_PASSWORD" >> .env
+          
+            # Stop and remove existing containers if any
+            docker-compose down
+          
+            # Start containers with the QA-ready images
+            docker-compose up -d
+          
+            echo "✅ QA deployment completed successfully!"
+          EOF
 #      - name: Process Test Results
 #        if: failure()
 #        run: |
