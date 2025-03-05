@@ -234,16 +234,22 @@ jobs:
           # Tag backend image
           BACKEND_MANIFEST=$(aws ecr batch-get-image \
             --repository-name backend \
-            --image-ids imageTag=${{ needs.build.outputs.image_tag }} \
+            --image-ids imageTag=$TAG \
             --query 'images[0].imageManifest' \
             --output text)
           
+          echo "Retrieved Image Manifest: $BACKEND_MANIFEST"
+          
           if [ -n "$BACKEND_MANIFEST" ] && [ "$BACKEND_MANIFEST" != "None" ]; then
             echo "Tagging backend image as QA-ready"
-            echo "$BACKEND_MANIFEST" | aws ecr put-image \
+          
+            # Convert the manifest into a valid JSON format
+            BACKEND_MANIFEST_JSON=$(echo "$BACKEND_MANIFEST" | jq -R .)
+          
+            echo "$BACKEND_MANIFEST_JSON" | aws ecr put-image \
               --repository-name backend \
               --image-tag QA-ready \
-              --image-manifest -
+              --image-manifest file://<(echo "$BACKEND_MANIFEST_JSON")
           else
             echo "Warning: Unable to get backend image manifest"
           fi
