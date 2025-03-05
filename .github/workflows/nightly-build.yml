@@ -277,7 +277,7 @@ jobs:
       - name: Deploy to QA EC2
         run: |
           # Copy docker-compose-qa.yml to QA EC2
-          scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no templates/docker-compose-qa.yml ec2-user@${{ env.QA_EC2_IP }}:~/docker-compose.yml
+          scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no templates/docker-compose.qa.yml ec2-user@${{ env.QA_EC2_IP }}:~/docker-compose.yml
           
           # Deploy to QA
           ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.QA_EC2_IP }} << EOF
