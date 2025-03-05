@@ -91,6 +91,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.run_tests != 'false' }}
+    outputs:
+      status: ${{ steps.deploy-test.outputs.status }}
     steps:
       - name: Checkout Infrastructure Repository
         uses: actions/checkout@v4
@@ -174,8 +176,6 @@ jobs:
       - name: Deploy and Test
         id: deploy-test
         continue-on-error: true
-        outputs:
-          test_status: ${{ steps.deploy-test.outputs.status }}
         run: |
             TAG="${{ needs.build.outputs.image_tag }}"
           
