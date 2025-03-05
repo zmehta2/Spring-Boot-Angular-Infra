@@ -173,6 +173,7 @@ jobs:
 
       - name: Deploy and Test
         id: deploy-test
+        continue-on-error: true
         run: |
             TAG="${{ needs.build.outputs.image_tag }}"
           
@@ -218,17 +219,15 @@ jobs:
             #Store test result
             TEST_RESULT=$?
             if [ $TEST_RESULT -eq 0 ]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "Smoke tests passed!"
+              echo "status=success" >> $GITHUB_OUTPUT
+              echo "Smoke tests passed!"
             else
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "Smoke tests failed!"
+              echo "status=failure" >> $GITHUB_OUTPUT
+              echo "Smoke tests failed!"
             fi
-            continue-on-error: true
-            id: test-result
 
       - name: Tag Images as QA-Ready
-        if: steps.test-result.outputs.status == 'success'
+        if: steps.deploy-test.outputs.status == 'success'
         run: |
             # Tag backend image for QA
             aws ecr batch-get-image \
@@ -253,7 +252,7 @@ jobs:
             echo "Images tagged as QA-ready"
 
       - name: Remove Failed Images
-        if: steps.test-result.outputs.status != 'success'
+        if: steps.deploy-test.outputs.status != 'success'
         run: |
             # Remove backend image
             aws ecr batch-delete-image \
