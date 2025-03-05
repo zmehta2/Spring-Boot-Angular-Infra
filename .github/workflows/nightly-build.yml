@@ -227,29 +227,45 @@ jobs:
             fi
 
       - name: Tag Images as QA-Ready
-        if: steps.deploy-test.outputs.status == 'success'
         run: |
-            # Tag backend image for QA
-            aws ecr batch-get-image \
-              --repository-name backend \
-              --image-ids imageTag=${{ needs.build.outputs.image_tag }} \
-              --query 'images[].imageManifest' \
-              --output text | aws ecr put-image \
+          
+          TAG="${{ needs.build.outputs.image_tag }}"
+          echo "image tag  is set to $TAG"
+          # Tag backend image
+          BACKEND_MANIFEST=$(aws ecr batch-get-image \
+            --repository-name backend \
+            --image-ids imageTag=${{ needs.build.outputs.image_tag }} \
+            --query 'images[0].imageManifest' \
+            --output text)
+          
+          if [ -n "$BACKEND_MANIFEST" ] && [ "$BACKEND_MANIFEST" != "None" ]; then
+            echo "Tagging backend image as QA-ready"
+            echo "$BACKEND_MANIFEST" | aws ecr put-image \
               --repository-name backend \
               --image-tag QA-ready \
               --image-manifest -
-            
-            # Tag frontend image for QA
-            aws ecr batch-get-image \
-              --repository-name frontend \
-              --image-ids imageTag=${{ needs.build.outputs.image_tag }} \
-              --query 'images[].imageManifest' \
-              --output text | aws ecr put-image \
+          else
+            echo "Warning: Unable to get backend image manifest"
+          fi
+          
+          # Tag frontend image
+          FRONTEND_MANIFEST=$(aws ecr batch-get-image \
+            --repository-name frontend \
+            --image-ids imageTag=${{ needs.build.outputs.image_tag }} \
+            --query 'images[0].imageManifest' \
+            --output text)
+          
+          if [ -n "$FRONTEND_MANIFEST" ] && [ "$FRONTEND_MANIFEST" != "None" ]; then
+            echo "Tagging frontend image as QA-ready"
+            echo "$FRONTEND_MANIFEST" | aws ecr put-image \
               --repository-name frontend \
               --image-tag QA-ready \
               --image-manifest -
-            
-            echo "Images tagged as QA-ready"
+          else
+            echo "Warning: Unable to get frontend image manifest"
+          fi
+          
+          echo "Images tagged as QA-ready"
 
       - name: Remove Failed Images
         if: steps.deploy-test.outputs.status != 'success'
