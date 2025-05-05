@@ -1,322 +1,322 @@
-name: CI/CD Pipeline
+# name: CI/CD Pipeline
 
-on:
-  push:
-    branches:
-      - main
-  schedule:
-    - cron: '0 0 * * *'  # Nightly build at midnight
-  workflow_dispatch:     # Manual trigger
-    inputs:
-      run_tests:
-        description: 'Run smoke tests'
-        type: boolean
-        default: true
+# on:
+#   push:
+#     branches:
+#       - main
+#   schedule:
+#     - cron: '0 0 * * *'  # Nightly build at midnight
+#   workflow_dispatch:     # Manual trigger
+#     inputs:
+#       run_tests:
+#         description: 'Run smoke tests'
+#         type: boolean
+#         default: true
 
-env:
-  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-  PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-  EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-  EC2_KEY_NAME: ${{ secrets.EC2_KEY_NAME }}
-  TEST_SG_ID: ${{ secrets.TEST_SG_ID }}
-  PUBLIC_SUBNET_ID: ${{ secrets.PUBLIC_SUBNET_ID }}
-  QA_EC2_IP: ${{ secrets.QA_EC2_IP }}
+# env:
+#   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+#   AWS_REGION: ${{ secrets.AWS_REGION }}
+#   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#   AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+#   PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+#   EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+#   EC2_KEY_NAME: ${{ secrets.EC2_KEY_NAME }}
+#   TEST_SG_ID: ${{ secrets.TEST_SG_ID }}
+#   PUBLIC_SUBNET_ID: ${{ secrets.PUBLIC_SUBNET_ID }}
+#   QA_EC2_IP: ${{ secrets.QA_EC2_IP }}
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ env.TAG }}
-    steps:
-      - name: Checkout Source Repository
-        uses: actions/checkout@v4
-        with:
-          repository: "zmehta2/Spring-Boot-Angular-8-CRUD-Example"
-          token: ${{ env.PAT_TOKEN }}
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     outputs:
+#       image_tag: ${{ env.TAG }}
+#     steps:
+#       - name: Checkout Source Repository
+#         uses: actions/checkout@v4
+#         with:
+#           repository: "zmehta2/Spring-Boot-Angular-8-CRUD-Example"
+#           token: ${{ env.PAT_TOKEN }}
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v1
+#         with:
+#           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ env.AWS_REGION }}
+#           aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+#       - name: Login to Amazon ECR
+#         id: login-ecr
+#         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Set Image Tags
-        run: |
-          if [[ "$GITHUB_REF" != "refs/heads/main" && "$GITHUB_REF" != "refs/heads/master" ]]; then
-            BRANCH=${GITHUB_REF##*/}
-            TAG="${BRANCH}-$(git rev-parse --short HEAD)"
-          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            TAG=${GITHUB_REF#refs/tags/}
-          else
-            TAG=$(git rev-parse --short HEAD)
-          fi
+#       - name: Set Image Tags
+#         run: |
+#           if [[ "$GITHUB_REF" != "refs/heads/main" && "$GITHUB_REF" != "refs/heads/master" ]]; then
+#             BRANCH=${GITHUB_REF##*/}
+#             TAG="${BRANCH}-$(git rev-parse --short HEAD)"
+#           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+#             TAG=${GITHUB_REF#refs/tags/}
+#           else
+#             TAG=$(git rev-parse --short HEAD)
+#           fi
 
-          echo "TAG=$TAG" >> $GITHUB_ENV
+#           echo "TAG=$TAG" >> $GITHUB_ENV
 
-          if [[ "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/master" ]]; then
-            echo "LATEST_TAG=latest" >> $GITHUB_ENV
-          fi
+#           if [[ "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/master" ]]; then
+#             echo "LATEST_TAG=latest" >> $GITHUB_ENV
+#           fi
 
-      - name: Build and Tag Docker Images
-        run: |
-          docker build -t $ECR_REGISTRY/backend:$TAG ./springboot2-jpa-crud-example
-          docker build -t $ECR_REGISTRY/frontend:$TAG ./angular8-springboot-client
+#       - name: Build and Tag Docker Images
+#         run: |
+#           docker build -t $ECR_REGISTRY/backend:$TAG ./springboot2-jpa-crud-example
+#           docker build -t $ECR_REGISTRY/frontend:$TAG ./angular8-springboot-client
 
-          if [[ -n "${{ env.LATEST_TAG }}" ]]; then
-            docker tag $ECR_REGISTRY/backend:$TAG $ECR_REGISTRY/backend:latest
-            docker tag $ECR_REGISTRY/frontend:$TAG $ECR_REGISTRY/frontend:latest
-          fi
+#           if [[ -n "${{ env.LATEST_TAG }}" ]]; then
+#             docker tag $ECR_REGISTRY/backend:$TAG $ECR_REGISTRY/backend:latest
+#             docker tag $ECR_REGISTRY/frontend:$TAG $ECR_REGISTRY/frontend:latest
+#           fi
 
-      - name: Push Images to ECR
-        run: |
-          docker push $ECR_REGISTRY/backend:$TAG
-          docker push $ECR_REGISTRY/frontend:$TAG
+#       - name: Push Images to ECR
+#         run: |
+#           docker push $ECR_REGISTRY/backend:$TAG
+#           docker push $ECR_REGISTRY/frontend:$TAG
 
-          if [[ -n "${{ env.LATEST_TAG }}" ]]; then
-            docker push $ECR_REGISTRY/backend:latest
-            docker push $ECR_REGISTRY/frontend:latest
-          fi
+#           if [[ -n "${{ env.LATEST_TAG }}" ]]; then
+#             docker push $ECR_REGISTRY/backend:latest
+#             docker push $ECR_REGISTRY/frontend:latest
+#           fi
 
-  smoke_test:
-    needs: build
-    runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.run_tests != 'false' }}
-    outputs:
-      status: ${{ steps.deploy-test.outputs.status }}
-    steps:
-      - name: Checkout Infrastructure Repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ env.PAT_TOKEN }}
+#   smoke_test:
+#     needs: build
+#     runs-on: ubuntu-latest
+#     if: ${{ github.event.inputs.run_tests != 'false' }}
+#     outputs:
+#       status: ${{ steps.deploy-test.outputs.status }}
+#     steps:
+#       - name: Checkout Infrastructure Repository
+#         uses: actions/checkout@v4
+#         with:
+#           token: ${{ env.PAT_TOKEN }}
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v1
+#         with:
+#           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ env.AWS_REGION }}
+#           aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
 
-      - name: Create EC2 Userdata Script
-        run: |
-          mkdir -p config
-          cat > config/test-ec2-userdata.sh << 'EOF'
-          #!/bin/bash
-          yum update -y
-          yum install -y docker
-          systemctl start docker
-          systemctl enable docker
-          usermod -a -G docker ec2-user
-          curl -L "https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          chmod +x /usr/local/bin/docker-compose
-          ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
-          yum install -y jq nc
-          EOF
-          chmod +x config/test-ec2-userdata.sh
+#       - name: Create EC2 Userdata Script
+#         run: |
+#           mkdir -p config
+#           cat > config/test-ec2-userdata.sh << 'EOF'
+#           #!/bin/bash
+#           yum update -y
+#           yum install -y docker
+#           systemctl start docker
+#           systemctl enable docker
+#           usermod -a -G docker ec2-user
+#           curl -L "https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+#           chmod +x /usr/local/bin/docker-compose
+#           ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+#           yum install -y jq nc
+#           EOF
+#           chmod +x config/test-ec2-userdata.sh
 
-      - name: Setup SSH Key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ env.EC2_SSH_KEY }}" > ~/.ssh/ec2-key.pem
-          chmod 600 ~/.ssh/ec2-key.pem
+#       - name: Setup SSH Key
+#         run: |
+#           mkdir -p ~/.ssh
+#           echo "${{ env.EC2_SSH_KEY }}" > ~/.ssh/ec2-key.pem
+#           chmod 600 ~/.ssh/ec2-key.pem
 
-      - name: Launch Test EC2 Instance
-        id: launch-ec2
-        run: |
-          echo "Using image tag: ${{ needs.build.outputs.image_tag }}"
+#       - name: Launch Test EC2 Instance
+#         id: launch-ec2
+#         run: |
+#           echo "Using image tag: ${{ needs.build.outputs.image_tag }}"
 
-          AMI_ID=$(aws ec2 describe-images \
-            --owners amazon \
-            --filters "Name=name,Values=amzn2-ami-hvm-*-x86_64-gp2" "Name=state,Values=available" \
-            --query "sort_by(Images, &CreationDate)[-1].ImageId" \
-            --output text)
-          echo "Using AMI: $AMI_ID"
+#           AMI_ID=$(aws ec2 describe-images \
+#             --owners amazon \
+#             --filters "Name=name,Values=amzn2-ami-hvm-*-x86_64-gp2" "Name=state,Values=available" \
+#             --query "sort_by(Images, &CreationDate)[-1].ImageId" \
+#             --output text)
+#           echo "Using AMI: $AMI_ID"
 
-          INSTANCE_ID=$(aws ec2 run-instances \
-            --image-id $AMI_ID \
-            --instance-type t2.micro \
-            --key-name ${{ env.EC2_KEY_NAME }} \
-            --security-group-ids ${{ env.TEST_SG_ID }} \
-            --subnet-id ${{ env.PUBLIC_SUBNET_ID }} \
-            --associate-public-ip-address \
-            --user-data file://config/test-ec2-userdata.sh \
-            --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=TestInstance-${{ needs.build.outputs.image_tag }} }]" \
-            --query 'Instances[0].InstanceId' \
-            --output text)
-          echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
-          aws ec2 wait instance-running --instance-ids $INSTANCE_ID
-          PUBLIC_IP=$(aws ec2 describe-instances \
-            --instance-ids $INSTANCE_ID \
-            --query 'Reservations[0].Instances[0].PublicIpAddress' \
-            --output text)
-          echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
+#           INSTANCE_ID=$(aws ec2 run-instances \
+#             --image-id $AMI_ID \
+#             --instance-type t2.micro \
+#             --key-name ${{ env.EC2_KEY_NAME }} \
+#             --security-group-ids ${{ env.TEST_SG_ID }} \
+#             --subnet-id ${{ env.PUBLIC_SUBNET_ID }} \
+#             --associate-public-ip-address \
+#             --user-data file://config/test-ec2-userdata.sh \
+#             --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=TestInstance-${{ needs.build.outputs.image_tag }} }]" \
+#             --query 'Instances[0].InstanceId' \
+#             --output text)
+#           echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
+#           aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+#           PUBLIC_IP=$(aws ec2 describe-instances \
+#             --instance-ids $INSTANCE_ID \
+#             --query 'Reservations[0].Instances[0].PublicIpAddress' \
+#             --output text)
+#           echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
 
-          for i in {1..30}; do
-            if nc -z -w5 $PUBLIC_IP 22; then
-              break
-            fi
-            sleep 10
-          done
+#           for i in {1..30}; do
+#             if nc -z -w5 $PUBLIC_IP 22; then
+#               break
+#             fi
+#             sleep 10
+#           done
 
 
-      - name: Wait for Instance Setup
-        run: |
-          sleep 30
+#       - name: Wait for Instance Setup
+#         run: |
+#           sleep 30
 
-      - name: Deploy and Test
-        id: deploy-test
-        continue-on-error: true
-        run: |
-            TAG="${{ needs.build.outputs.image_tag }}"
+#       - name: Deploy and Test
+#         id: deploy-test
+#         continue-on-error: true
+#         run: |
+#             TAG="${{ needs.build.outputs.image_tag }}"
           
-            # Add StrictHostKeyChecking=no to SCP command
-            scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no scripts/*.sh init.sql templates/docker-compose.test.yml ec2-user@${{ env.PUBLIC_IP }}:~/
+#             # Add StrictHostKeyChecking=no to SCP command
+#             scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no scripts/*.sh init.sql templates/docker-compose.test.yml ec2-user@${{ env.PUBLIC_IP }}:~/
             
-            ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.PUBLIC_IP }} <<EOF
-                # Make scripts executable
-                chmod +x *.sh
+#             ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.PUBLIC_IP }} <<EOF
+#                 # Make scripts executable
+#                 chmod +x *.sh
                 
-                # Set environment variables
-                export ECR_REGISTRY="821625964871.dkr.ecr.us-east-1.amazonaws.com"
-                export TAG="cea4791"
-                export AWS_ACCESS_KEY_ID="${{ env.AWS_ACCESS_KEY_ID }}"
-                export AWS_SECRET_ACCESS_KEY="${{ env.AWS_SECRET_ACCESS_KEY }}"
-                export AWS_REGION="${{ env.AWS_REGION }}"
-                export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
+#                 # Set environment variables
+#                 export ECR_REGISTRY="821625964871.dkr.ecr.us-east-1.amazonaws.com"
+#                 export TAG="cea4791"
+#                 export AWS_ACCESS_KEY_ID="${{ env.AWS_ACCESS_KEY_ID }}"
+#                 export AWS_SECRET_ACCESS_KEY="${{ env.AWS_SECRET_ACCESS_KEY }}"
+#                 export AWS_REGION="${{ env.AWS_REGION }}"
+#                 export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
                 
-                # RDS credentials
-                export MYSQL_USER="${{ secrets.MYSQL_USER }}"
-                export MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
+#                 # RDS credentials
+#                 export MYSQL_USER="${{ secrets.MYSQL_USER }}"
+#                 export MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
                 
-                echo "AWS_REGION is set to $AWS_REGION"
-                echo "AWS_SESSION_TOKEN is set to $AWS_SESSION_TOKEN"
-                echo "ECR_REGISTRY is set to $ECR_REGISTRY"
-                echo "TAG is set to $TAG"
-                echo "Logging into ECR at $ECR_REGISTRY..."
-                aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+#                 echo "AWS_REGION is set to $AWS_REGION"
+#                 echo "AWS_SESSION_TOKEN is set to $AWS_SESSION_TOKEN"
+#                 echo "ECR_REGISTRY is set to $ECR_REGISTRY"
+#                 echo "TAG is set to $TAG"
+#                 echo "Logging into ECR at $ECR_REGISTRY..."
+#                 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
                 
-                # Verify login worked by trying a direct pull
-                echo "Testing docker pull directly..."
+#                 # Verify login worked by trying a direct pull
+#                 echo "Testing docker pull directly..."
                 
-                # Use the correct docker-compose file
-                echo "Starting docker-compose with ECR_REGISTRY=$ECR_REGISTRY and TAG=$TAG"
-                docker-compose -f docker-compose.test.yml up -d
-                echo "Docker-compose up complete"
-                sleep 30
-                docker ps
+#                 # Use the correct docker-compose file
+#                 echo "Starting docker-compose with ECR_REGISTRY=$ECR_REGISTRY and TAG=$TAG"
+#                 docker-compose -f docker-compose.test.yml up -d
+#                 echo "Docker-compose up complete"
+#                 sleep 30
+#                 docker ps
                 
-                curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8080/springboot-crud-rest/api/v1/employees | grep -q 200 || exit 1
-                echo "✅ Backend code deployed successfully!"
+#                 curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8080/springboot-crud-rest/api/v1/employees | grep -q 200 || exit 1
+#                 echo "✅ Backend code deployed successfully!"
                 
-                curl -o /dev/null -s -w "%{http_code}\n" http://localhost:4200/ | grep -q 200 || exit 1
-                echo "✅ Frontend code deployed successfully!"
+#                 curl -o /dev/null -s -w "%{http_code}\n" http://localhost:4200/ | grep -q 200 || exit 1
+#                 echo "✅ Frontend code deployed successfully!"
           
-                echo "Smoke tests passed!"
-                echo "Temporary Instance ID: $INSTANCE_ID"
-            EOF
-            #Store test result
-            TEST_RESULT=$?
-            if [ $TEST_RESULT -eq 0 ]; then
-              echo "status=success" >> $GITHUB_OUTPUT
-              echo "Smoke tests passed!"
-            else
-              echo "status=failure" >> $GITHUB_OUTPUT
-              echo "Smoke tests failed!"
-            fi
+#                 echo "Smoke tests passed!"
+#                 echo "Temporary Instance ID: $INSTANCE_ID"
+#             EOF
+#             #Store test result
+#             TEST_RESULT=$?
+#             if [ $TEST_RESULT -eq 0 ]; then
+#               echo "status=success" >> $GITHUB_OUTPUT
+#               echo "Smoke tests passed!"
+#             else
+#               echo "status=failure" >> $GITHUB_OUTPUT
+#               echo "Smoke tests failed!"
+#             fi
 
-      - name: Remove Failed Images
-        if: steps.deploy-test.outputs.status != 'success'
-        run: |
-            # Remove backend image
-            aws ecr batch-delete-image \
-              --repository-name backend \
-              --image-ids imageTag=${{ needs.build.outputs.image_tag }}
+#       - name: Remove Failed Images
+#         if: steps.deploy-test.outputs.status != 'success'
+#         run: |
+#             # Remove backend image
+#             aws ecr batch-delete-image \
+#               --repository-name backend \
+#               --image-ids imageTag=${{ needs.build.outputs.image_tag }}
             
-            # Remove frontend image
-            aws ecr batch-delete-image \
-              --repository-name frontend \
-              --image-ids imageTag=${{ needs.build.outputs.image_tag }}
+#             # Remove frontend image
+#             aws ecr batch-delete-image \
+#               --repository-name frontend \
+#               --image-ids imageTag=${{ needs.build.outputs.image_tag }}
             
-            echo "Failed images removed from ECR"
+#             echo "Failed images removed from ECR"
 
-      - name: Cleanup EC2 Instance
-        if: always()
-        run: |
-            echo "Terminating EC2 instance ${{ env.INSTANCE_ID }}"
-            aws ec2 terminate-instances --instance-ids ${{ env.INSTANCE_ID }}
-            echo "Test EC2 instance terminated"
+#       - name: Cleanup EC2 Instance
+#         if: always()
+#         run: |
+#             echo "Terminating EC2 instance ${{ env.INSTANCE_ID }}"
+#             aws ec2 terminate-instances --instance-ids ${{ env.INSTANCE_ID }}
+#             echo "Test EC2 instance terminated"
 
-  deploy_to_qa:
-    needs: [build, smoke_test]
-    runs-on: ubuntu-latest
-    if: needs.smoke_test.outputs.status == 'success'
-    steps:
-      - name: Checkout Infrastructure Repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ env.PAT_TOKEN }}
+#   deploy_to_qa:
+#     needs: [build, smoke_test]
+#     runs-on: ubuntu-latest
+#     if: needs.smoke_test.outputs.status == 'success'
+#     steps:
+#       - name: Checkout Infrastructure Repository
+#         uses: actions/checkout@v4
+#         with:
+#           token: ${{ env.PAT_TOKEN }}
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v1
+#         with:
+#           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ env.AWS_REGION }}
+#           aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
 
-      - name: Setup SSH Key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ env.EC2_SSH_KEY }}" > ~/.ssh/ec2-key.pem
-          chmod 600 ~/.ssh/ec2-key.pem
+#       - name: Setup SSH Key
+#         run: |
+#           mkdir -p ~/.ssh
+#           echo "${{ env.EC2_SSH_KEY }}" > ~/.ssh/ec2-key.pem
+#           chmod 600 ~/.ssh/ec2-key.pem
 
-      - name: Deploy to QA EC2
-        run: |
-          # Copy docker-compose-qa.yml to QA EC2
-          scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no templates/docker-compose.qa.yml ec2-user@${{ env.QA_EC2_IP }}:~/docker-compose.yml
+#       - name: Deploy to QA EC2
+#         run: |
+#           # Copy docker-compose-qa.yml to QA EC2
+#           scp -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no templates/docker-compose.qa.yml ec2-user@${{ env.QA_EC2_IP }}:~/docker-compose.yml
           
-          # Deploy to QA
-          ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.QA_EC2_IP }} << EOF
-            # Set environment variables
-            export ECR_REGISTRY="${{ secrets.ECR_REGISTRY }}"
-            export AWS_ACCESS_KEY_ID="${{ env.AWS_ACCESS_KEY_ID }}"
-            export AWS_SECRET_ACCESS_KEY="${{ env.AWS_SECRET_ACCESS_KEY }}"
-            export AWS_REGION="${{ env.AWS_REGION }}"
-            export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
+#           # Deploy to QA
+#           ssh -i ~/.ssh/ec2-key.pem -o StrictHostKeyChecking=no ec2-user@${{ env.QA_EC2_IP }} << EOF
+#             # Set environment variables
+#             export ECR_REGISTRY="${{ secrets.ECR_REGISTRY }}"
+#             export AWS_ACCESS_KEY_ID="${{ env.AWS_ACCESS_KEY_ID }}"
+#             export AWS_SECRET_ACCESS_KEY="${{ env.AWS_SECRET_ACCESS_KEY }}"
+#             export AWS_REGION="${{ env.AWS_REGION }}"
+#             export AWS_SESSION_TOKEN="${{ env.AWS_SESSION_TOKEN }}"
           
-            # RDS credentials
-            export MYSQL_USER="${{ secrets.MYSQL_USER }}"
-            export MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
+#             # RDS credentials
+#             export MYSQL_USER="${{ secrets.MYSQL_USER }}"
+#             export MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}"
           
-            # Login to ECR
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+#             # Login to ECR
+#             aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
           
-            # Pull QA-ready images
-            echo "Pulling QA-ready images..."
-            docker pull $ECR_REGISTRY/backend:latest
-            docker pull $ECR_REGISTRY/frontend:latest
+#             # Pull QA-ready images
+#             echo "Pulling QA-ready images..."
+#             docker pull $ECR_REGISTRY/backend:latest
+#             docker pull $ECR_REGISTRY/frontend:latest
           
-            # Create .env file with necessary variables
-            echo "ECR_REGISTRY=$ECR_REGISTRY" > .env
-            echo "MYSQL_USER=$MYSQL_USER" >> .env
-            echo "MYSQL_PASSWORD=$MYSQL_PASSWORD" >> .env
+#             # Create .env file with necessary variables
+#             echo "ECR_REGISTRY=$ECR_REGISTRY" > .env
+#             echo "MYSQL_USER=$MYSQL_USER" >> .env
+#             echo "MYSQL_PASSWORD=$MYSQL_PASSWORD" >> .env
           
-            # Stop and remove existing containers if any
-            docker-compose down
+#             # Stop and remove existing containers if any
+#             docker-compose down
           
-            # Start containers with the QA-ready images
-            docker-compose up -d
+#             # Start containers with the QA-ready images
+#             docker-compose up -d
           
-            echo "✅ QA deployment completed successfully!"
-          EOF
+#             echo "✅ QA deployment completed successfully!"
+#           EOF
 
